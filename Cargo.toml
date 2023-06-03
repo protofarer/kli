@@ -1,13 +1,20 @@
 [package]
 name = "kli"
 version = "0.1.0"
+authors = ["kennybaron@fastmail.com"]
+license = "MIT"
+description = "Kenny's CLI Omnitool"
+readme = "README.md"
+homepage = "https://github.com/protofarer/kli"
+keywords = ["cli", "productivity"]
+categories = ["command-line-utilities"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 anyhow = "1.0.71"
-clap = { version = "4.3.0", features = ["derive"] }
+clap = { version = "4.3.0", features = ["derive", "cargo"] }
 indicatif = "0.17.4"
 
 [dev-dependencies]
