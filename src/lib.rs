@@ -1,42 +1,10 @@
 use std::process::{Command, Stdio};
 
 use anyhow::{anyhow, Context, Result};
-use clap::{arg, Arg, ArgAction, Parser};
+use clap::{arg, command, Arg, ArgAction};
 
-#[derive(Parser)]
-#[command(arg_required_else_help = true)]
-pub struct Args {
-    // #[arg(short = 'o', long = "output")]
-    pattern: String,
-    path: std::path::PathBuf,
-}
-
-pub fn run() -> Result<()> {
-    // let args = Args::parse();
-    cli();
-
-    // gh_new_remote_repo()?;
-
-    // String::from_utf8(output.stdout)?
-    //     .lines()
-    //     .for_each(|x| println!("{}", x));
-
-    // if args.pattern.is_empty() {
-    //     return Err(anyhow!("pattern cannot be empty"));
-    // }
-
-    // let content = std::fs::read_to_string(&args.path)
-    //     .with_context(|| format!("could not read file `{}`", &args.path.display()))?;
-
-    // find_matches(&content, &args.pattern, &mut std::io::stdout())?;
-
-    Ok(())
-}
-
-fn gh_create_remote_repo(name: &str, is_public: bool) -> Result<()> {
-    let privacy = if is_public { "--public" } else { "--private" };
-
-    println!("gh fn recvd: name {} public flag {}", name, privacy);
+pub fn gh_create_remote_repo(name: &str, is_public: bool) -> Result<()> {
+    println!("gh fn recvd: name {} public flag {}", name, is_public);
     // let status = Command::new("/usr/bin/gh")
     //     .arg("repo")
     //     .arg("create")
@@ -70,44 +38,6 @@ fn gh_create_remote_repo(name: &str, is_public: bool) -> Result<()> {
     //     ));
     // }
 
-    Ok(())
-}
-
-fn cli() -> Result<()> {
-    let matches = clap::Command::new("kli")
-        .version("0.1.0")
-        .author("Kenny <kennybaron@fastmail.com")
-        .about("Kenny's CLI Omnitool")
-        .subcommand_required(true)
-        .arg_required_else_help(true)
-        .allow_external_subcommands(true)
-        .subcommand(
-            clap::Command::new("repo")
-                .about("Creates a new GitHub repo, private by default")
-                .arg(arg!([NAME]))
-                .arg_required_else_help(true)
-                .about("Set repo name")
-                // .required(true)
-                .arg(
-                    Arg::new("public")
-                        .long("public")
-                        .short('p')
-                        .action(ArgAction::SetTrue),
-                )
-                .about("Makes a public repo"),
-        )
-        .get_matches();
-    match matches.subcommand() {
-        Some(("repo", sub_matches)) => {
-            let name = sub_matches.get_one::<String>("NAME").unwrap();
-            let is_public = sub_matches.get_flag("public");
-            gh_create_remote_repo(name, is_public)?;
-        }
-        _ => unreachable!("Exhausted list of subcommands, subcomman_required prevents `None`"),
-    }
-    // let name = matches.value_of("name").unwrap();
-    // let is_public = matches.is_present("public");
-    // run_create_repo(name, is_public)?;
     Ok(())
 }
 
