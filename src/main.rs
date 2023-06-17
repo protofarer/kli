@@ -1,7 +1,7 @@
 #![allow(warnings)]
 
 use clap::{command, Args, Parser, Subcommand};
-use kli::{gh_create_repo, gh_remove_repo};
+use kli::{create_vhost_subdomain, gh_create_repo, gh_remove_repo};
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -21,12 +21,13 @@ enum Commands {
 
 #[derive(Subcommand)]
 enum NewCommands {
-    Rep(NewRepArgs),
+    Repo(NewRepoArgs),
     Web { name: String },
+    Subdomain { name: Option<String> },
 }
 
 #[derive(Args)]
-struct NewRepArgs {
+struct NewRepoArgs {
     name: String,
     #[arg(short, long)]
     public: bool,
@@ -34,11 +35,11 @@ struct NewRepArgs {
 
 #[derive(Subcommand)]
 enum RemCommands {
-    Rep(RemRepArgs),
+    Repo(RemRepoArgs),
 }
 
 #[derive(Args)]
-struct RemRepArgs {
+struct RemRepoArgs {
     repo: String,
     #[arg(short, long)]
     yes: bool,
@@ -47,30 +48,26 @@ struct RemRepArgs {
 fn main() {
     let cli = Cli::parse();
     match &cli.command {
-        Commands::New(NewCommands::Rep(NewRepArgs { name, public })) => {
-            main_handle_result(gh_create_repo(name, *public));
-            // match gh_create_repo(name, *public) {
-            //     Ok(v) => println!("success"),
-            //     Err(e) => eprintln!("{:?}", e),
-            // }
+        Commands::New(NewCommands::Repo(NewRepoArgs { name, public })) => {
+            handle_result(gh_create_repo(name, *public));
         }
-        Commands::Rem(RemCommands::Rep(RemRepArgs { repo, yes })) => {
-            // match gh_remove_repo(repo, *prompt) {
-            //     Ok(v) => println!("success"),
-            //     Err(e) => eprintln!("{:?}", e),
-            // }
-            main_handle_result(gh_remove_repo(repo, *yes));
+        Commands::New(NewCommands::Subdomain { name }) => {
+            handle_result(create_vhost_subdomain(name));
+        }
+        Commands::Rem(RemCommands::Repo(RemRepoArgs { repo, yes })) => {
+            handle_result(gh_remove_repo(repo, *yes));
         }
 
         Commands::New(NewCommands::Web { name }) => {
             println!("{name}",)
         }
-        _ => unreachable!("no commands heere"),
+        _ => unreachable!("no commands here"),
     }
 }
 
-fn main_handle_result(result: anyhow::Result<()>) {
+fn handle_result(result: anyhow::Result<()>) {
     if let Err(e) = result {
-        eprintln!("{:?}", e);
+        panic!("{}", e)
+        // eprintln!("{:?}", e);
     }
 }

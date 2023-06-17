@@ -1,0 +1,40 @@
+[ssh]
+user = "kenny"
+host = "knet"
+nickname = "knet"
+
+[subdomain]
+vhost_config = """
+server {
+  listen [::]:443 ssl; # ipv6only=on;
+  listen 443 ssl;
+
+  server_name $FILENAME_VHOST;
+
+  index index.html index.htm index.nginx-debian.html;
+
+  root /var/www/$FILENAME_VHOST/html;
+
+  location / {
+          # First attempt to serve request as file, then
+          # as directory, then fall back to displaying a 404.
+          try_files $uri $uri/ =404;
+  }
+
+  ssl_certificate /etc/letsencrypt/live/kennybaron.net-0001/fullchain.pem; # managed by Certbot
+  ssl_certificate_key /etc/letsencrypt/live/kennybaron.net-0001/privkey.pem; # managed by Certbot
+      include /etc/letsencrypt/options-ssl-nginx.conf;
+      ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+}
+
+server {
+  listen 80;
+  listen [::]:80;
+
+  server_name $FILENAME_VHOST;
+
+  return 301 https://$host$request_uri;
+}
+"""
+
+domain = "kennybaron.net"
