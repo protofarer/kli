@@ -8,19 +8,19 @@ use std::{
 use anyhow::{anyhow, Context, Result};
 use clap::{arg, command, Arg, ArgAction};
 
-pub fn create_vhost_subdomain(name_input: &Option<String>) -> Result<()> {
+pub fn create_vhost_subdomain(input_name: &Option<String>) -> Result<()> {
     let mut subdomain_word: String;
-    if let Some(name) = name_input {
+    if let Some(name) = input_name {
         subdomain_word = String::from(name);
     } else {
-        subdomain_word = read_json_value_from_file("package.json", "name")
-            .with_context(|| format!("Error: cannot read package.json"))?;
+        subdomain_word = read_json_value_from_file("package.json", "name").with_context(|| {
+            format!("Error: no subdomain was given, neither arg nor via package.json name")
+        })?;
     }
 
     // ! try "kli new subdomain"
     // ! try "kli new subdomain hoohee"
     // ! try "kli new subdomain" w/ test .json (write test)
-    dbg!(subdomain_word);
 
     // ? CSDR
     // - options to set username, host, or ssh nickname for command
@@ -42,28 +42,48 @@ pub fn create_vhost_subdomain(name_input: &Option<String>) -> Result<()> {
     // - soft link from sites-avail to sites-enabled
     // service nginx reload
 
-    println!("did we get here",);
+    // TODO get host string from config file
+    println!(
+        "Successfully created subdomain {} at {}",
+        subdomain_word, "CONFIG_FILE_HOST_STRING"
+    );
     Ok(())
 }
+fn newrepo_no_gitdir() {
+    // "Error: Cannot create remote repo without a local repo in cwd"
+}
 
-pub fn gh_create_repo(name: &str, is_public: bool) -> Result<()> {
-    // cwd must have a git repo
+pub fn gh_create_repo(input_name: &Option<String>, is_public: bool) -> Result<()> {
+    let mut repo_name: String;
+
+    if let Some(name) = input_name {
+        repo_name = String::from(name);
+    } else {
+        repo_name = read_json_value_from_file("package.json", "name").with_context(|| {
+            format!("Error: no repo name was given, neither arg nor via package.json name")
+        })?;
+    }
+
+    // check for local repo
     let output = Command::new("/usr/bin/git")
         .arg("rev-parse")
         .arg("--is-inside-work-tree")
         .output()
         .context("Failed to execute 'git rev-parse --is-inside-work-tree")?;
 
+    // I want to make a local repo first if it doesn't already exist
     if !output.status.success() {
-        return Err(anyhow!(
-            "Error: Cannot create remote repo without a local repo in cwd"
-        ));
+        println!("No local repo detected, creating one for you...");
+        Command::new("/usr/bin/git")
+            .arg("init")
+            .status()
+            .context("Failed to 'git init'");
     }
 
     let status = Command::new("/usr/bin/gh")
         .arg("repo")
         .arg("create")
-        .arg(name)
+        .arg(&repo_name)
         .arg(if is_public { "--public" } else { "--private" })
         .status()
         .context("Failed to execute 'gh repo create'")?;
@@ -75,7 +95,7 @@ pub fn gh_create_repo(name: &str, is_public: bool) -> Result<()> {
         ));
     }
 
-    let url = format!("https://github.com/protofarer/{}", name);
+    let url = format!("https://github.com/protofarer/{}", &repo_name);
     let status = Command::new("/usr/bin/git")
         .arg("remote")
         .arg("add")
@@ -91,20 +111,23 @@ pub fn gh_create_repo(name: &str, is_public: bool) -> Result<()> {
         ));
     }
 
-    let status = Command::new("/usr/bin/git")
-        .arg("push")
-        .arg("-u")
-        .arg("origin")
-        .arg("main")
-        .status()
-        .context("Failed to execute 'git push -u origin main'")?;
+    // * not generally used
+    // let status = Command::new("/usr/bin/git")
+    //     .arg("push")
+    //     .arg("-u")
+    //     .arg("origin")
+    //     .arg("main")
+    //     .status()
+    //     .context("Failed to execute 'git push -u origin main'")?;
 
-    if !status.success() {
-        return Err(anyhow!(
-            "'git push -u origin main' failed with exit status {}",
-            status
-        ));
-    }
+    // if !status.success() {
+    //     return Err(anyhow!(
+    //         "'git push -u origin main' failed with exit status {}",
+    //         status
+    //     ));
+    // }
+
+    println!("Successfully created remote repo {}", repo_name);
 
     Ok(())
 }

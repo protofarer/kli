@@ -28,7 +28,7 @@ enum NewCommands {
 
 #[derive(Args)]
 struct NewRepoArgs {
-    name: String,
+    name: Option<String>,
     #[arg(short, long)]
     public: bool,
 }
