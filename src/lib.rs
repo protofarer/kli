@@ -67,7 +67,7 @@ pub fn new_remote_repo(input_name: &Option<String>, is_public: bool) -> Result<(
         .arg("rev-parse")
         .arg("--is-inside-work-tree")
         .output()
-        .context("Failed to execute 'git rev-parse --is-inside-work-tree")?;
+        .context("Error: Failed to execute 'git rev-parse --is-inside-work-tree")?;
 
     // make a local repo first if it doesn't already exist
     if !output.status.success() {
@@ -75,7 +75,7 @@ pub fn new_remote_repo(input_name: &Option<String>, is_public: bool) -> Result<(
         Command::new("/usr/bin/git")
             .arg("init")
             .status()
-            .context("Failed to 'git init'");
+            .context("Error: Failed to 'git init'");
     }
 
     println!("Attempting to create new repo {}", repo_name);
@@ -85,11 +85,11 @@ pub fn new_remote_repo(input_name: &Option<String>, is_public: bool) -> Result<(
         .arg(&repo_name)
         .arg(if is_public { "--public" } else { "--private" })
         .status()
-        .context("Failed to execute 'gh repo create'")?;
+        .context("Error: Failed to execute 'gh repo create'")?;
 
     if !status.success() {
         return Err(anyhow!(
-            "'gh repo create' failed with exit status {}",
+            "Error: 'gh repo create' failed with exit status {}",
             status
         ));
     }
@@ -101,11 +101,11 @@ pub fn new_remote_repo(input_name: &Option<String>, is_public: bool) -> Result<(
         .arg("origin")
         .arg(&url)
         .status()
-        .context("Failed to execute 'git remote add'")?;
+        .context("Error: Failed to execute 'git remote add'")?;
 
     if !status.success() {
         return Err(anyhow!(
-            "'git remote add' failed with exit status {}",
+            "Error: 'git remote add' failed with exit status {}",
             status
         ));
     }
@@ -138,11 +138,11 @@ pub fn remove_remote_repo(name: &str) -> Result<()> {
         .arg("https://github.com/protofarer/".to_owned() + name)
         .arg("--yes")
         .status()
-        .context("Failed to execute 'gh repo delete --yes'")?;
+        .context("Error: Failed to execute 'gh repo delete --yes'")?;
 
     if !status.success() {
         return Err(anyhow!(
-            "'gh repo delete' failed with exit status {}",
+            "Error: 'gh repo delete' failed with exit status {}",
             status
         ));
     }

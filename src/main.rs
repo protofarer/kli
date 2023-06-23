@@ -74,7 +74,8 @@ fn main() {
 
 fn handle_result(result: anyhow::Result<()>) {
     if let Err(e) = result {
-        eprintln!("{}", e)
+        eprintln!("{}", e);
+        panic!()
         // eprintln!("{:?}", e);
     }
 }
