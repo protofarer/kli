@@ -1,33 +1,30 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use assert_cmd::prelude::*;
 use ctor::ctor;
 use predicates::prelude::*;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::Stdio;
 use std::{fs::File, process::Command};
 use tempfile::{tempdir, TempDir};
+use uuid::Uuid;
 
 pub struct TestContext {
-    cwd: PathBuf,
-    tmpdir: TempDir,
+    _tmpdir: TempDir,
+    path: PathBuf,
 }
 
 impl TestContext {
     pub fn new() -> Self {
         let tmpdir = tempdir().expect("Failed to create temp dir");
-        dbg!(&tmpdir);
+        let path = tmpdir.path().to_path_buf();
 
-        let cwd = std::env::current_dir().expect("Failed to get cwd");
-        std::env::set_current_dir(&tmpdir).expect("Failed to 'cd <tempdir>'");
-
-        Self { cwd, tmpdir }
+        Self {
+            _tmpdir: tmpdir,
+            path,
+        }
     }
-}
-
-impl Drop for TestContext {
-    fn drop(&mut self) {
-        std::env::set_current_dir(&self.cwd).expect("Failed to 'cd <previous wd>'");
+    pub fn path(&self) -> &PathBuf {
+        &self.path
     }
 }
 
@@ -37,21 +34,28 @@ pub enum ProjectName {
 }
 
 impl ProjectName {
-    pub fn value(&self) -> &'static str {
+    pub fn value(&self) -> String {
+        let uuid = Uuid::new_v4();
         match *self {
-            ProjectName::FromArg => "name_via_arg",
-            ProjectName::FromJson => "name_via_json",
+            ProjectName::FromArg => format!("name_via_arg_{}", uuid),
+            ProjectName::FromJson => format!("name_via_json_{}", uuid),
         }
     }
 }
 
-fn cleanup_remote_repos() -> Result<()> {
-    if let Err(e) = repo_remote_delete(ProjectName::FromArg.value()) {
-        eprintln!("{:?}", e);
-    }
-    if let Err(e) = repo_remote_delete(ProjectName::FromJson.value()) {
-        eprintln!("{:?}", e);
-    }
+// TODO test repos now have unique names base on timestamp, consider doing gh
+// list repos and running cleanup code on this with appropriate prefixes per
+// ProjectName struct
+fn _cleanup_remote_repos() -> Result<()> {
+    // run `gh repo list protofarer --json name --jq '.[] | .name | match("^name_via.*") | .string'
+    // returns a string like "repoOne\nrepoTwo\nrepoThree\n"
+    // ? CSDR moving to a standalone script since tests are reliably doing their own cleanup
+    // if let Err(e) = repo_remote_delete(&ProjectName::FromArg.value()) {
+    //     eprintln!("{:?}", e);
+    // }
+    // if let Err(e) = repo_remote_delete(&ProjectName::FromJson.value()) {
+    //     eprintln!("{:?}", e);
+    // }
     Ok(())
 }
 
@@ -60,7 +64,7 @@ fn before_all_tests() {
     println!("*********************************************");
     println!("Running before_all_tests setup",);
     println!("*********************************************");
-    cleanup_remote_repos().unwrap();
+    // cleanup_remote_repos().unwrap();
     println!("*********************************************");
     println!("Fin setup",);
     println!("*********************************************");
@@ -69,14 +73,14 @@ fn before_all_tests() {
 // * NEW REPO
 
 #[test]
-fn newrepo_no_localrepo_yes_name_arg() -> Result<()> {
-    let _ctx = TestContext::new();
+fn newrepo_n_localrepo_y_namearg() -> Result<()> {
+    let ctx = TestContext::new();
 
     let project_name = ProjectName::FromArg.value();
 
     let mut cmd = Command::cargo_bin("kli")?;
-    cmd.arg("new").arg("repo").arg(project_name);
-
+    cmd.arg("new").arg("repo").arg(&project_name);
+    cmd.current_dir(ctx.path());
     cmd.assert()
         .stdout(predicate::str::contains("No local repo detected"))
         .stdout(predicate::str::contains(format!(
@@ -85,17 +89,18 @@ fn newrepo_no_localrepo_yes_name_arg() -> Result<()> {
         )))
         .success();
 
-    repo_remote_delete(project_name)?;
+    repo_remote_delete(&project_name)?;
 
     Ok(())
 }
 
 #[test]
-fn newrepo_no_pkgjson_no_name_arg() -> Result<()> {
-    let _ctx = TestContext::new();
+fn newrepo_n_pkgjson_n_namearg() -> Result<()> {
+    let ctx = TestContext::new();
 
     let mut cmd = Command::cargo_bin("kli")?;
     cmd.arg("new").arg("repo");
+    cmd.current_dir(ctx.path());
     cmd.assert()
         .stderr(predicate::str::contains("Error: no repo name was given"))
         .failure();
@@ -104,20 +109,22 @@ fn newrepo_no_pkgjson_no_name_arg() -> Result<()> {
 }
 
 #[test]
-fn newrepo_yes_pkgjson_no_name_arg() -> Result<()> {
+fn newrepo_y_pkgjson_n_namearg() -> Result<()> {
     let ctx = TestContext::new();
 
     Command::new("/usr/bin/git")
         .arg("init")
+        .current_dir(ctx.path())
         .status()
         .context("Failed to execute 'git init'")?;
 
     let project_name = ProjectName::FromJson.value();
 
-    create_json_file_with_entry(ctx.tmpdir.path(), "name", project_name)?;
+    create_json_file_with_entry(ctx.path(), "name", &project_name)?;
 
     let mut cmd = Command::cargo_bin("kli")?;
     cmd.arg("new").arg("repo");
+    cmd.current_dir(ctx.path());
     cmd.assert()
         .stdout(predicate::str::contains(format!(
             "Successfully created remote repo {}",
@@ -125,44 +132,23 @@ fn newrepo_yes_pkgjson_no_name_arg() -> Result<()> {
         )))
         .success();
 
-    repo_remote_delete(project_name)?;
+    repo_remote_delete(&project_name)?;
 
     Ok(())
 }
 
 #[test]
-fn newrepo_no_pkgjson_yes_name_arg() -> Result<()> {
-    let _ctx = TestContext::new();
-
-    // init git repo
-    Command::new("git").arg("init");
-
-    let project_name = ProjectName::FromArg.value();
-
-    let mut cmd = Command::cargo_bin("kli")?;
-    cmd.arg("new").arg("repo").arg(project_name);
-    cmd.assert()
-        .stdout(predicate::str::contains(format!(
-            "Successfully created remote repo {}",
-            project_name
-        )))
-        .success();
-
-    repo_remote_delete(project_name)?;
-
-    Ok(())
-}
-
-#[test]
-fn newrepo_yes_pkgjson_yes_name_arg() -> Result<()> {
+fn newrepo_n_pkgjson_y_namearg() -> Result<()> {
     let ctx = TestContext::new();
 
-    create_json_file_with_entry(ctx.tmpdir.path(), "name", "pkgjson_project_name")?;
+    // init git repo
+    Command::new("git").arg("init").current_dir(ctx.path());
 
     let project_name = ProjectName::FromArg.value();
 
     let mut cmd = Command::cargo_bin("kli")?;
-    cmd.arg("new").arg("repo").arg(project_name);
+    cmd.arg("new").arg("repo").arg(&project_name);
+    cmd.current_dir(ctx.path());
     cmd.assert()
         .stdout(predicate::str::contains(format!(
             "Successfully created remote repo {}",
@@ -170,7 +156,30 @@ fn newrepo_yes_pkgjson_yes_name_arg() -> Result<()> {
         )))
         .success();
 
-    repo_remote_delete(project_name)?;
+    repo_remote_delete(&project_name)?;
+
+    Ok(())
+}
+
+#[test]
+fn newrepo_y_pkgjson_y_namearg() -> Result<()> {
+    let ctx = TestContext::new();
+
+    create_json_file_with_entry(ctx.path(), "name", "pkgjson_project_name")?;
+
+    let project_name = ProjectName::FromArg.value();
+
+    let mut cmd = Command::cargo_bin("kli")?;
+    cmd.arg("new").arg("repo").arg(&project_name);
+    cmd.current_dir(ctx.path());
+    cmd.assert()
+        .stdout(predicate::str::contains(format!(
+            "Successfully created remote repo {}",
+            project_name
+        )))
+        .success();
+
+    repo_remote_delete(&project_name)?;
 
     Ok(())
 }
@@ -192,13 +201,14 @@ impl SubdomainWord {
 }
 
 #[test]
-fn subdomain_no_pkgjson_no_name_arg() -> Result<()> {
-    let _ctx = TestContext::new();
+fn newsubdomain_n_pkgjson_n_namearg() -> Result<()> {
+    let ctx = TestContext::new();
 
-    // no subdomain word, no package.json cwd
     let mut cmd = Command::cargo_bin("kli")?;
-    cmd.arg("new").arg("subdomain");
-    cmd.assert()
+    cmd.arg("new")
+        .arg("subdomain")
+        .current_dir(ctx.path())
+        .assert()
         .failure()
         .stderr(predicate::str::contains("Error: no subdomain was given"));
 
@@ -206,15 +216,17 @@ fn subdomain_no_pkgjson_no_name_arg() -> Result<()> {
 }
 
 #[test]
-fn subdomain_yes_pkgjson_no_name_arg() -> Result<()> {
+fn newsubdomain_y_pkgjson_n_namearg() -> Result<()> {
     let ctx = TestContext::new();
 
     let subdomain_word = SubdomainWord::FromJson.value();
-    create_json_file_with_entry(ctx.tmpdir.path(), "name", &subdomain_word)?;
+    create_json_file_with_entry(ctx.path(), "name", &subdomain_word)?;
 
     let mut cmd = Command::cargo_bin("kli")?;
-    cmd.arg("new").arg("subdomain");
-    cmd.assert()
+    cmd.arg("new")
+        .arg("subdomain")
+        .current_dir(ctx.path())
+        .assert()
         .stdout(predicate::str::contains(format!(
             "Successfully created subdomain {}",
             subdomain_word
@@ -225,15 +237,16 @@ fn subdomain_yes_pkgjson_no_name_arg() -> Result<()> {
 }
 
 #[test]
-fn subdomain_no_pkgjson_yes_name_arg() -> Result<()> {
+fn newsubdomain_n_pkgjson_y_namearg() -> Result<()> {
     let _ctx = TestContext::new();
 
     let subdomain_word = SubdomainWord::FromArg.value();
 
     let mut cmd = Command::cargo_bin("kli")?;
-    cmd.arg("new").arg("subdomain").arg(&subdomain_word);
-
-    cmd.assert()
+    cmd.arg("new")
+        .arg("subdomain")
+        .arg(&subdomain_word)
+        .assert()
         .stdout(predicate::str::contains(format!(
             "Successfully created subdomain {}",
             subdomain_word
@@ -244,17 +257,19 @@ fn subdomain_no_pkgjson_yes_name_arg() -> Result<()> {
 }
 
 #[test]
-fn subdomain_yes_pkgjson_yes_name_arg() -> Result<()> {
+fn newsubdomain_y_pkgjson_y_namearg() -> Result<()> {
     let ctx = TestContext::new();
 
-    create_json_file_with_entry(ctx.tmpdir.path(), "name", "pkgjson_name")?;
+    create_json_file_with_entry(ctx.path(), "name", "pkgjson_name")?;
 
     let subdomain_word = SubdomainWord::FromArg.value();
 
     let mut cmd = Command::cargo_bin("kli")?;
-    cmd.arg("new").arg("subdomain").arg(&subdomain_word);
-
-    cmd.assert()
+    cmd.arg("new")
+        .arg("subdomain")
+        .arg(&subdomain_word)
+        .current_dir(ctx.path())
+        .assert()
         .stdout(predicate::str::contains(format!(
             "Successfully created subdomain {}",
             subdomain_word
@@ -264,17 +279,17 @@ fn subdomain_yes_pkgjson_yes_name_arg() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn zzz_cleanup() -> Result<()> {
-    println!("*********************************************");
-    println!("Cleanup for tests",);
-    println!("*********************************************");
-    cleanup_remote_repos().unwrap();
-    println!("*********************************************");
-    println!("Fin cleanup",);
-    println!("*********************************************");
-    Ok(())
-}
+// #[test]
+// fn zzz_cleanup() -> Result<()> {
+//     println!("*********************************************");
+//     println!("Cleanup for tests",);
+//     println!("*********************************************");
+//     cleanup_remote_repos().unwrap();
+//     println!("*********************************************");
+//     println!("Fin cleanup",);
+//     println!("*********************************************");
+//     Ok(())
+// }
 
 fn create_json_file_with_entry(dir: &Path, key: &str, value: &str) -> Result<()> {
     let file_path = dir.join("package.json");

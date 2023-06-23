@@ -27,10 +27,11 @@ pub fn create_vhost_subdomain(input_name: &Option<String>) -> Result<()> {
     // - read ssh info from a config file or env
 
     // TODO
-    // read username:host or ssh nickname (ssh config file)
     // determine subdomain:
     // 1. if name None => default to cwd package.json name or cargo.toml package name
     // 2. else use given name
+
+    // read username:host or ssh nickname (ssh config file)
 
     // initiate strings for vhost, sites_available, sites_enabled
     // initiate string for vhost file itself, with interpolation
@@ -49,11 +50,8 @@ pub fn create_vhost_subdomain(input_name: &Option<String>) -> Result<()> {
     );
     Ok(())
 }
-fn newrepo_no_gitdir() {
-    // "Error: Cannot create remote repo without a local repo in cwd"
-}
 
-pub fn gh_create_repo(input_name: &Option<String>, is_public: bool) -> Result<()> {
+pub fn new_remote_repo(input_name: &Option<String>, is_public: bool) -> Result<()> {
     let mut repo_name: String;
 
     if let Some(name) = input_name {
@@ -71,7 +69,7 @@ pub fn gh_create_repo(input_name: &Option<String>, is_public: bool) -> Result<()
         .output()
         .context("Failed to execute 'git rev-parse --is-inside-work-tree")?;
 
-    // I want to make a local repo first if it doesn't already exist
+    // make a local repo first if it doesn't already exist
     if !output.status.success() {
         println!("No local repo detected, creating one for you...");
         Command::new("/usr/bin/git")
@@ -80,6 +78,7 @@ pub fn gh_create_repo(input_name: &Option<String>, is_public: bool) -> Result<()
             .context("Failed to 'git init'");
     }
 
+    println!("Attempting to create new repo {}", repo_name);
     let status = Command::new("/usr/bin/gh")
         .arg("repo")
         .arg("create")
@@ -132,22 +131,14 @@ pub fn gh_create_repo(input_name: &Option<String>, is_public: bool) -> Result<()
     Ok(())
 }
 
-pub fn gh_remove_repo(name: &str, yes: bool) -> Result<()> {
-    let status = match yes {
-        true => Command::new("/usr/bin/gh")
-            .arg("repo")
-            .arg("delete")
-            .arg("https://github.com/protofarer/".to_owned() + name)
-            .arg("--yes")
-            .status()
-            .context("Failed to execute 'gh repo delete --yes'")?,
-        false => Command::new("/usr/bin/gh")
-            .arg("repo")
-            .arg("delete")
-            .arg("https://github.com/protofarer/".to_owned() + name)
-            .status()
-            .context("Failed to execute 'gh repo delete'")?,
-    };
+pub fn remove_remote_repo(name: &str) -> Result<()> {
+    let status = Command::new("/usr/bin/gh")
+        .arg("repo")
+        .arg("delete")
+        .arg("https://github.com/protofarer/".to_owned() + name)
+        .arg("--yes")
+        .status()
+        .context("Failed to execute 'gh repo delete --yes'")?;
 
     if !status.success() {
         return Err(anyhow!(

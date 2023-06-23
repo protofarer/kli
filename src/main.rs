@@ -1,28 +1,36 @@
 #![allow(warnings)]
 
 use clap::{command, Args, Parser, Subcommand};
-use kli::{create_vhost_subdomain, gh_create_repo, gh_remove_repo};
+use kli::{create_vhost_subdomain, new_remote_repo, remove_remote_repo};
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct Cli {
+    /// top level command
     #[command(subcommand)]
     command: Commands,
 }
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Create something new
     #[command(subcommand)]
     New(NewCommands),
 
+    /// Delete something existing
     #[command(subcommand)]
     Rem(RemCommands),
 }
 
 #[derive(Subcommand)]
 enum NewCommands {
+    /// Create remote repo
     Repo(NewRepoArgs),
+
+    /// Start new web app project
     Web { name: String },
+
+    /// Create subdomain on designated host
     Subdomain { name: Option<String> },
 }
 
@@ -35,27 +43,26 @@ struct NewRepoArgs {
 
 #[derive(Subcommand)]
 enum RemCommands {
+    /// Delete remote repo
     Repo(RemRepoArgs),
 }
 
 #[derive(Args)]
 struct RemRepoArgs {
-    repo: String,
-    #[arg(short, long)]
-    yes: bool,
+    repo_name: String,
 }
 
 fn main() {
     let cli = Cli::parse();
     match &cli.command {
         Commands::New(NewCommands::Repo(NewRepoArgs { name, public })) => {
-            handle_result(gh_create_repo(name, *public));
+            handle_result(new_remote_repo(name, *public));
         }
         Commands::New(NewCommands::Subdomain { name }) => {
             handle_result(create_vhost_subdomain(name));
         }
-        Commands::Rem(RemCommands::Repo(RemRepoArgs { repo, yes })) => {
-            handle_result(gh_remove_repo(repo, *yes));
+        Commands::Rem(RemCommands::Repo(RemRepoArgs { repo_name })) => {
+            handle_result(remove_remote_repo(repo_name));
         }
 
         Commands::New(NewCommands::Web { name }) => {
@@ -67,7 +74,7 @@ fn main() {
 
 fn handle_result(result: anyhow::Result<()>) {
     if let Err(e) = result {
-        panic!("{}", e)
+        eprintln!("{}", e)
         // eprintln!("{:?}", e);
     }
 }
