@@ -1,10 +1,11 @@
-use anyhow::{Context, Result};
-use assert_cmd::prelude::*;
-use ctor::ctor;
-use predicates::prelude::*;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::{fs::File, process::Command};
+
+use anyhow::{anyhow, Context, Result};
+use assert_cmd::prelude::*;
+use ctor::ctor;
+use predicates::prelude::*;
 use tempfile::{tempdir, TempDir};
 use uuid::Uuid;
 
@@ -43,19 +44,36 @@ impl ProjectName {
     }
 }
 
-// TODO test repos now have unique names base on timestamp, consider doing gh
-// list repos and running cleanup code on this with appropriate prefixes per
-// ProjectName struct
-fn _cleanup_remote_repos() -> Result<()> {
-    // run `gh repo list protofarer --json name --jq '.[] | .name | match("^name_via.*") | .string'
+// * Keep here (instead of standalone script) since tests under development may not cleanup correctly
+fn cleanup_remote_repos() -> Result<()> {
+    // gh repo list protofarer --json name --jq '.[] | .name | match("^name_via.*") | .string'
     // returns a string like "repoOne\nrepoTwo\nrepoThree\n"
-    // ? CSDR moving to a standalone script since tests are reliably doing their own cleanup
-    // if let Err(e) = repo_remote_delete(&ProjectName::FromArg.value()) {
-    //     eprintln!("{:?}", e);
-    // }
-    // if let Err(e) = repo_remote_delete(&ProjectName::FromJson.value()) {
-    //     eprintln!("{:?}", e);
-    // }
+
+    // TODO replace protofarer with TOML config gh username read
+
+    let output = Command::new("/usr/bin/gh")
+        .arg("repo")
+        .arg("list")
+        .arg("protofarer")
+        .arg("--json")
+        .arg("name")
+        .arg("--jq")
+        .arg(".[] | .name | match(\"^name_via.*\") | .string")
+        .output()
+        .context("Error: Failed to run 'gh repo list'")?;
+
+    dbg!(&output.stdout);
+    let output_str = std::str::from_utf8(&output.stdout)
+        .context("Error: Failed to convert gh repo list output to string")?;
+    println!("***** Test repos to delete: ***** \n{}", output_str);
+
+    for repo_name in output_str.lines() {
+        if let Err(e) = repo_remote_delete(repo_name) {
+            eprintln!("Error deleting repo {}: {:?}", repo_name, e);
+        } else {
+            println!("Cleaned up repo {}", repo_name);
+        }
+    }
     Ok(())
 }
 
@@ -184,6 +202,63 @@ fn newrepo_y_pkgjson_y_namearg() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn newrepo_remote_exists() -> Result<()> {
+    let ctx = TestContext::new();
+
+    let project_name = ProjectName::FromArg.value();
+
+    Command::new("/usr/bin/git")
+        .current_dir(ctx.path())
+        .arg("init")
+        .status()
+        .context("Error: Failed to 'git init'")?;
+
+    let status = Command::new("/usr/bin/gh")
+        .arg("repo")
+        .arg("create")
+        .arg(&project_name)
+        .arg("--private")
+        .status()
+        .context("Error: Failed to execute 'gh repo create'")?;
+
+    if !status.success() {
+        return Err(anyhow!(
+            "Error: 'gh repo create' failed with exit status {}",
+            status
+        ));
+    }
+
+    let url = format!("https://github.com/protofarer/{}", &project_name);
+    let status = Command::new("/usr/bin/git")
+        .current_dir(ctx.path())
+        .arg("remote")
+        .arg("add")
+        .arg("origin")
+        .arg(&url)
+        .status()
+        .context("Error: Failed to execute 'git remote add'")?;
+
+    if !status.success() {
+        return Err(anyhow!(
+            "Error: 'git remote add' failed with exit status {}",
+            status
+        ));
+    }
+
+    let mut cmd = Command::cargo_bin("kli")?;
+    cmd.arg("new").arg("repo").arg(&project_name);
+    cmd.current_dir(ctx.path());
+    cmd.assert()
+        .stderr(predicate::str::contains(
+            "Error: Remote repository already exists",
+        ))
+        .failure();
+    // repo_remote_delete(&project_name)?;
+
+    Ok(())
+}
+
 // * NEW SUBDOMAIN
 
 pub enum SubdomainWord {
@@ -279,17 +354,17 @@ fn newsubdomain_y_pkgjson_y_namearg() -> Result<()> {
     Ok(())
 }
 
-// #[test]
-// fn zzz_cleanup() -> Result<()> {
-//     println!("*********************************************");
-//     println!("Cleanup for tests",);
-//     println!("*********************************************");
-//     cleanup_remote_repos().unwrap();
-//     println!("*********************************************");
-//     println!("Fin cleanup",);
-//     println!("*********************************************");
-//     Ok(())
-// }
+#[test]
+fn zzz_cleanup() -> Result<()> {
+    println!("*********************************************");
+    println!("Cleanup for tests",);
+    println!("*********************************************");
+    cleanup_remote_repos().unwrap();
+    println!("*********************************************");
+    println!("Fin cleanup",);
+    println!("*********************************************");
+    Ok(())
+}
 
 fn create_json_file_with_entry(dir: &Path, key: &str, value: &str) -> Result<()> {
     let file_path = dir.join("package.json");

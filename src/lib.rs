@@ -69,13 +69,26 @@ pub fn new_remote_repo(input_name: &Option<String>, is_public: bool) -> Result<(
         .output()
         .context("Error: Failed to execute 'git rev-parse --is-inside-work-tree")?;
 
+    if output.status.success() {
+        let remote_output = Command::new("/usr/bin/git")
+            .arg("remote")
+            .arg("-v")
+            .output()
+            .context("Error: Failed to execute 'git remote -v'")?;
+
+        let remote_str = std::str::from_utf8(&remote_output.stdout).unwrap_or("");
+        if remote_str.contains("origin") {
+            return Err(anyhow!("Error: Remote repository already exists"));
+        }
+    }
+
     // make a local repo first if it doesn't already exist
     if !output.status.success() {
         println!("No local repo detected, creating one for you...");
         Command::new("/usr/bin/git")
             .arg("init")
             .status()
-            .context("Error: Failed to 'git init'");
+            .context("Error: Failed to 'git init'")?;
     }
 
     println!("Attempting to create new repo {}", repo_name);
@@ -109,22 +122,6 @@ pub fn new_remote_repo(input_name: &Option<String>, is_public: bool) -> Result<(
             status
         ));
     }
-
-    // * not generally used
-    // let status = Command::new("/usr/bin/git")
-    //     .arg("push")
-    //     .arg("-u")
-    //     .arg("origin")
-    //     .arg("main")
-    //     .status()
-    //     .context("Failed to execute 'git push -u origin main'")?;
-
-    // if !status.success() {
-    //     return Err(anyhow!(
-    //         "'git push -u origin main' failed with exit status {}",
-    //         status
-    //     ));
-    // }
 
     println!("Successfully created remote repo {}", repo_name);
 
