@@ -8,8 +8,14 @@ use std::{
 use anyhow::{anyhow, Context, Result};
 use clap::{arg, command, Arg, ArgAction};
 
-pub fn create_vhost_subdomain(input_name: &Option<String>) -> Result<()> {
+pub mod config;
+
+pub fn create_vhost_subdomain(cfg: &Config, input_name: &Option<String>) -> Result<()> {
     let mut subdomain_word: String;
+
+    // determine subdomain:
+    // 1. if name None => default to cwd package.json name or cargo.toml package name
+    // 2. else use given name
     if let Some(name) = input_name {
         subdomain_word = String::from(name);
     } else {
@@ -18,21 +24,13 @@ pub fn create_vhost_subdomain(input_name: &Option<String>) -> Result<()> {
         })?;
     }
 
-    // ! try "kli new subdomain"
-    // ! try "kli new subdomain hoohee"
-    // ! try "kli new subdomain" w/ test .json (write test)
-
-    // ? CSDR
-    // - options to set username, host, or ssh nickname for command
+    // options for ssh user/server info
     // - read ssh info from a config file or env
+    // - options to set username, host, or ssh nickname for command
+
+    // TODO read ssh info from TOML config file
 
     // TODO
-    // determine subdomain:
-    // 1. if name None => default to cwd package.json name or cargo.toml package name
-    // 2. else use given name
-
-    // read username:host or ssh nickname (ssh config file)
-
     // initiate strings for vhost, sites_available, sites_enabled
     // initiate string for vhost file itself, with interpolation
     // save vhost string to tmp file
@@ -51,7 +49,7 @@ pub fn create_vhost_subdomain(input_name: &Option<String>) -> Result<()> {
     Ok(())
 }
 
-pub fn new_remote_repo(input_name: &Option<String>, is_public: bool) -> Result<()> {
+pub fn new_remote_repo(cfg: &Config, input_name: &Option<String>, is_public: bool) -> Result<()> {
     let mut repo_name: String;
 
     if let Some(name) = input_name {
@@ -107,7 +105,9 @@ pub fn new_remote_repo(input_name: &Option<String>, is_public: bool) -> Result<(
         ));
     }
 
-    let url = format!("https://github.com/protofarer/{}", &repo_name);
+    let gh_username = cfg.gh_username()?;
+
+    let url = format!("https://github.com/{}/{}", gh_username, &repo_name);
     let status = Command::new("/usr/bin/git")
         .arg("remote")
         .arg("add")
@@ -128,7 +128,7 @@ pub fn new_remote_repo(input_name: &Option<String>, is_public: bool) -> Result<(
     Ok(())
 }
 
-pub fn remove_remote_repo(name: &str) -> Result<()> {
+pub fn remove_remote_repo(cfg: &Config, name: &str) -> Result<()> {
     let status = Command::new("/usr/bin/gh")
         .arg("repo")
         .arg("delete")
@@ -162,6 +162,7 @@ pub fn remove_remote_repo(name: &str) -> Result<()> {
 // }
 // pb.finish_with_message("Ok, DONE!");
 
+use config::Config;
 use serde_json;
 use std::fs::File;
 pub fn read_json_value_from_file(filepath: &str, key: &str) -> Result<String> {
@@ -181,7 +182,7 @@ pub fn read_json_value_from_file(filepath: &str, key: &str) -> Result<String> {
 }
 
 #[cfg(test)] // compile and run only on `cargo test`
-mod read_json_file {
+mod test_read_json_file {
     use super::*;
     use std::fs::File;
     use std::io::Write;

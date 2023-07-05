@@ -1,7 +1,7 @@
 #![allow(warnings)]
 
 use clap::{command, Args, Parser, Subcommand};
-use kli::{create_vhost_subdomain, new_remote_repo, remove_remote_repo};
+use kli::{config::Config, create_vhost_subdomain, new_remote_repo, remove_remote_repo};
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -54,15 +54,20 @@ struct RemRepoArgs {
 
 fn main() {
     let cli = Cli::parse();
+    let cfg = Config::new(None).unwrap_or_else(|e| {
+        eprintln!("{}", e);
+        panic!();
+    });
+
     match &cli.command {
         Commands::New(NewCommands::Repo(NewRepoArgs { name, public })) => {
-            handle_result(new_remote_repo(name, *public));
+            handle_result(new_remote_repo(&cfg, name, *public));
         }
         Commands::New(NewCommands::Subdomain { name }) => {
-            handle_result(create_vhost_subdomain(name));
+            handle_result(create_vhost_subdomain(&cfg, name));
         }
         Commands::Rem(RemCommands::Repo(RemRepoArgs { repo_name })) => {
-            handle_result(remove_remote_repo(repo_name));
+            handle_result(remove_remote_repo(&cfg, repo_name));
         }
 
         Commands::New(NewCommands::Web { name }) => {
