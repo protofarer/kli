@@ -70,21 +70,21 @@ impl Config {
     }
 
     pub fn gh_username(&self) -> Result<&str> {
-        match self.gh_username {
+        match self.gh_username.as_ref() {
             Some(username) => Ok(&username),
             None => Err(anyhow!("No github username specified in config file")),
         }
     }
 
     pub fn ssh_username(&self) -> Result<&str> {
-        match self.ssh_username {
+        match self.ssh_username.as_ref() {
             Some(username) => Ok(&username),
             None => Err(anyhow!("No ssh username specified in config file")),
         }
     }
 
     pub fn ssh_host(&self) -> Result<&str> {
-        match self.ssh_host {
+        match self.ssh_host.as_ref() {
             Some(host) => Ok(&host),
             None => Err(anyhow!("No ssh host specified in config file")),
         }
