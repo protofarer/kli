@@ -1,17 +1,18 @@
-#![allow(warnings)]
-
-use std::{
-    io::BufReader,
-    process::{Command, Stdio},
-};
+use std::{io::BufReader, process::Command};
 
 use anyhow::{anyhow, Context, Result};
-use clap::{arg, command, Arg, ArgAction};
 
 pub mod config;
 
-pub fn create_vhost_subdomain(cfg: &Config, input_name: &Option<String>) -> Result<()> {
-    let mut subdomain_word: String;
+/// # Errors
+///
+/// Will return `anyhow::Error`:
+///     - fails to open or read package.json and no virtual host name was given
+///     - fails to find ssh parameters
+///     - fails to write virtual host config to remote host
+///     - fails nginx config file check
+pub fn create_vhost_subdomain(_cfg: &Config, input_name: &Option<String>) -> Result<()> {
+    let subdomain_word: String;
 
     // determine subdomain:
     // 1. if name None => default to cwd package.json name or cargo.toml package name
@@ -20,7 +21,7 @@ pub fn create_vhost_subdomain(cfg: &Config, input_name: &Option<String>) -> Resu
         subdomain_word = String::from(name);
     } else {
         subdomain_word = read_json_value_from_file("package.json", "name").with_context(|| {
-            format!("Error: no subdomain was given, neither arg nor via package.json name")
+            "Error: no subdomain was given, neither arg nor via package.json name".to_owned()
         })?;
     }
 
@@ -42,21 +43,25 @@ pub fn create_vhost_subdomain(cfg: &Config, input_name: &Option<String>) -> Resu
     // service nginx reload
 
     // TODO get host string from config file
-    println!(
-        "Successfully created subdomain {} at {}",
-        subdomain_word, "CONFIG_FILE_HOST_STRING"
-    );
+    println!("Successfully created subdomain {subdomain_word} at CONFIG_FILE_HOST_STRING");
     Ok(())
 }
 
+/// # Errors
+///
+/// Will return `anyhow::Error`:
+///     - no repo name was given and fails to open or read package.json
+///     - remote repo already exists
+///     - fails to create remote repo
+///     - fails to set remote repo
 pub fn new_remote_repo(cfg: &Config, input_name: &Option<String>, is_public: bool) -> Result<()> {
-    let mut repo_name: String;
+    let repo_name: String;
 
     if let Some(name) = input_name {
         repo_name = String::from(name);
     } else {
         repo_name = read_json_value_from_file("package.json", "name").with_context(|| {
-            format!("Error: no repo name was given, neither arg nor via package.json name")
+            "Error: no repo name was given, neither arg nor via package.json name".to_owned()
         })?;
     }
 
@@ -89,7 +94,7 @@ pub fn new_remote_repo(cfg: &Config, input_name: &Option<String>, is_public: boo
             .context("Error: Failed to 'git init'")?;
     }
 
-    println!("Attempting to create new repo {}", repo_name);
+    println!("Attempting to create new repo {repo_name}");
     let status = Command::new("/usr/bin/gh")
         .arg("repo")
         .arg("create")
@@ -123,12 +128,16 @@ pub fn new_remote_repo(cfg: &Config, input_name: &Option<String>, is_public: boo
         ));
     }
 
-    println!("Successfully created remote repo {}", repo_name);
+    println!("Successfully created remote repo {repo_name}");
 
     Ok(())
 }
 
-pub fn remove_remote_repo(cfg: &Config, name: &str) -> Result<()> {
+/// # Errors
+///
+/// Will return `anyhow::Error`:
+///     - gh command errors out
+pub fn remove_remote_repo(_cfg: &Config, name: &str) -> Result<()> {
     let status = Command::new("/usr/bin/gh")
         .arg("repo")
         .arg("delete")
@@ -163,21 +172,24 @@ pub fn remove_remote_repo(cfg: &Config, name: &str) -> Result<()> {
 // pb.finish_with_message("Ok, DONE!");
 
 use config::Config;
-use serde_json;
 use std::fs::File;
+/// # Errors
+///
+/// Will return `anyhow::Error`:
+///     - fails to open or read json file
 pub fn read_json_value_from_file(filepath: &str, key: &str) -> Result<String> {
-    let file = File::open(filepath)
-        .with_context(|| format!("Error: could not open file `{}`", filepath))?;
+    let file =
+        File::open(filepath).with_context(|| format!("Error: could not open file `{filepath}`"))?;
 
     let reader = BufReader::new(file);
 
     let json_value: serde_json::Value = serde_json::from_reader(reader)
-        .with_context(|| format!("Error: value could not be read from json file"))?;
+        .with_context(|| "Error: value could not be read from json file".to_owned())?;
 
     Ok(json_value
         .get(key)
         .and_then(serde_json::Value::as_str)
-        .with_context(|| format!("Error: key not found"))?
+        .with_context(|| "Error: key not found".to_owned())?
         .to_string())
 }
 
@@ -200,7 +212,8 @@ mod test_read_json_file {
 
         {
             let mut file = File::create(&file_path).expect("Failed to create file");
-            writeln!(file, "{{ \"key1\": \"val1\", \"key2\": \"val2\" }}");
+            writeln!(file, "{{ \"key1\": \"val1\", \"key2\": \"val2\" }}")
+                .expect("Failed to write to file");
         }
 
         let result = read_json_value_from_file(file_path.to_str().unwrap(), "key1").unwrap();
@@ -217,7 +230,8 @@ mod test_read_json_file {
 
         {
             let mut file = File::create(&file_path).expect("Failed to create file");
-            writeln!(file, "{{ \"key1\": \"val1\", \"key2\": \"val2\" }}");
+            writeln!(file, "{{ \"key1\": \"val1\", \"key2\": \"val2\" }}")
+                .expect("Failed to write to file");
         }
 
         let result = read_json_value_from_file(file_path.to_str().unwrap(), "keyZ");

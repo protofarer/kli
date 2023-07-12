@@ -8,7 +8,7 @@ use toml;
 // Enables using a test config file by specifying path different than production default
 pub struct Config {
     // ? CSDR file needed only for read and edit operations, rm from object and read from path as needed
-    // pub file: ConfigFile,
+    // pub file: ParsedFile,
     pub path: PathBuf,
     pub ssh_username: Option<String>,
     pub ssh_host: Option<String>,
@@ -16,32 +16,45 @@ pub struct Config {
 }
 
 impl Config {
+    /// # Errors
+    ///
+    /// Returns `anyhow::Result/Error` if problems reading config file
     pub fn new(path: Option<&str>) -> Result<Self> {
         let default_path = "/home/kenny/.config/kli/config.toml";
-        let path = match path {
-            Some(p) => p,
-            None => default_path,
-        };
+        let path = path.map_or(default_path, |p| p);
 
-        let cfg = Config::read_config(&path)?;
+        let cfg = Self::read_config(path)?;
 
         let ssh_username: Option<String>;
         let ssh_host: Option<String>;
-        match cfg.ssh {
-            Some(ssh) => {
-                match ssh.username {
-                    Some(username) => ssh_username = Some(username),
-                    None => ssh_username = None,
-                }
-                match ssh.host {
-                    Some(host) => ssh_host = Some(host),
-                    None => ssh_host = None,
-                }
+        // match cfg.ssh {
+        //     Some(ssh) => {
+        //         match ssh.username {
+        //             Some(username) => ssh_username = Some(username),
+        //             None => ssh_username = None,
+        //         }
+        //         match ssh.host {
+        //             Some(host) => ssh_host = Some(host),
+        //             None => ssh_host = None,
+        //         }
+        //     }
+        //     None => {
+        //         ssh_username = None;
+        //         ssh_host = None;
+        //     }
+        // }
+        if let Some(ssh) = cfg.ssh {
+            match ssh.username {
+                Some(username) => ssh_username = Some(username),
+                None => ssh_username = None,
             }
-            None => {
-                ssh_username = None;
-                ssh_host = None;
+            match ssh.host {
+                Some(host) => ssh_host = Some(host),
+                None => ssh_host = None,
             }
+        } else {
+            ssh_username = None;
+            ssh_host = None;
         }
 
         let gh_username: Option<String>;
@@ -62,56 +75,67 @@ impl Config {
         })
     }
 
-    fn read_config(path: &str) -> Result<ConfigFile> {
-        let contents = read_toml_to_string(path).unwrap();
-        let config_file: ConfigFile = toml::from_str(&contents)
-            .with_context(|| format!("Error: could not read toml file"))?;
+    fn read_config(path: &str) -> Result<ParsedFile> {
+        let contents = read_toml_to_string(path)?;
+        let config_file: ParsedFile = toml::from_str(&contents)
+            .with_context(|| "Error: could not read toml file".to_owned())?;
         Ok(config_file)
     }
 
+    /// # Errors
+    ///
+    /// Will return `anyhow::Error` if github username not in file
     pub fn gh_username(&self) -> Result<&str> {
-        match self.gh_username.as_ref() {
-            Some(username) => Ok(&username),
-            None => Err(anyhow!("No github username specified in config file")),
-        }
+        self.gh_username.as_deref().map_or_else(
+            || Err(anyhow!("No github username specified in config file")),
+            Ok,
+        )
     }
 
+    /// # Errors
+    ///
+    /// Will return `anyhow::Error` if ssh username not in file
     pub fn ssh_username(&self) -> Result<&str> {
-        match self.ssh_username.as_ref() {
-            Some(username) => Ok(&username),
-            None => Err(anyhow!("No ssh username specified in config file")),
-        }
+        self.ssh_username.as_deref().map_or_else(
+            || Err(anyhow!("No ssh username specified in config file")),
+            Ok,
+        )
     }
 
+    /// # Errors
+    ///
+    /// Will return `anyhow::Error` if ssh host not in file
     pub fn ssh_host(&self) -> Result<&str> {
-        match self.ssh_host.as_ref() {
-            Some(host) => Ok(&host),
-            None => Err(anyhow!("No ssh host specified in config file")),
-        }
+        self.ssh_host
+            .as_deref()
+            .map_or_else(|| Err(anyhow!("No ssh host specified in config file")), Ok)
     }
 }
 
 // TOML config file representation
 #[derive(Deserialize, Debug)]
-pub struct ConfigFile {
-    pub ssh: Option<SshConfig>,
-    pub github: Option<GithubConfig>,
+pub struct ParsedFile {
+    pub ssh: Option<SshParameters>,
+    pub github: Option<GithubParameters>,
 }
 
 #[derive(Deserialize, Debug)]
-pub struct SshConfig {
+pub struct SshParameters {
     pub username: Option<String>,
     pub host: Option<String>,
 }
 
 #[derive(Deserialize, Debug)]
-pub struct GithubConfig {
+pub struct GithubParameters {
     pub username: Option<String>,
 }
 
+/// # Errors
+///
+/// Will return `anyhow::Error` if cannot open or read file
 pub fn read_toml_to_string(filepath: &str) -> Result<String> {
     let mut file = fs::File::open(filepath)
-        .with_context(|| format!("Error: could not open file `{}`", filepath))?;
+        .with_context(|| format!("Error: could not open file `{filepath}`"))?;
     let mut contents = String::new();
     file.read_to_string(&mut contents)?;
     Ok(contents)

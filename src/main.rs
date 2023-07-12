@@ -1,5 +1,3 @@
-#![allow(warnings)]
-
 use clap::{command, Args, Parser, Subcommand};
 use kli::{config::Config, create_vhost_subdomain, new_remote_repo, remove_remote_repo};
 
@@ -55,7 +53,7 @@ struct RemRepoArgs {
 fn main() {
     let cli = Cli::parse();
     let cfg = Config::new(None).unwrap_or_else(|e| {
-        eprintln!("{}", e);
+        eprintln!("{e}");
         panic!();
     });
 
@@ -69,17 +67,15 @@ fn main() {
         Commands::Rem(RemCommands::Repo(RemRepoArgs { repo_name })) => {
             handle_result(remove_remote_repo(&cfg, repo_name));
         }
-
         Commands::New(NewCommands::Web { name }) => {
-            println!("{name}",)
+            println!("{name}");
         }
-        _ => unreachable!("no commands here"),
     }
 }
 
 fn handle_result(result: anyhow::Result<()>) {
     if let Err(e) = result {
-        eprintln!("{}", e);
+        eprintln!("{e}");
         panic!()
         // eprintln!("{:?}", e);
     }
