@@ -1,9 +1,11 @@
 use anyhow::{anyhow, Context, Result};
 use serde::Deserialize;
-use std::fs;
+use std::fs::{self};
 use std::io::Read;
 use std::path::PathBuf;
 use toml;
+
+// TODO cleanup temp files
 
 // Enables using a test config file by specifying path different than production default
 pub struct Config {
@@ -27,22 +29,7 @@ impl Config {
 
         let ssh_username: Option<String>;
         let ssh_host: Option<String>;
-        // match cfg.ssh {
-        //     Some(ssh) => {
-        //         match ssh.username {
-        //             Some(username) => ssh_username = Some(username),
-        //             None => ssh_username = None,
-        //         }
-        //         match ssh.host {
-        //             Some(host) => ssh_host = Some(host),
-        //             None => ssh_host = None,
-        //         }
-        //     }
-        //     None => {
-        //         ssh_username = None;
-        //         ssh_host = None;
-        //     }
-        // }
+
         if let Some(ssh) = cfg.ssh {
             match ssh.username {
                 Some(username) => ssh_username = Some(username),
@@ -144,23 +131,62 @@ pub fn read_toml_to_string(filepath: &str) -> Result<String> {
 #[cfg(test)]
 mod test_config {
     use super::*;
+    use std::fs::File;
     use std::io::Write;
+    use std::path::Path;
+    use uuid::Uuid;
 
-    // consider a struct, impl drop for fs::remove_file
-    // creates example toml config file, auto-remove file upon drop
-    // auto enumerates/makes unique filenames to avoid collisions during test
-    // ...see newrepo pkgjson tests
-    // fn test_ctx_toml_cfg(contents: &str) -> Result<String> {}
+    pub struct TestFile {
+        file: File,
+        path: PathBuf,
+    }
+
+    impl TestFile {
+        pub fn new() -> Self {
+            let temp_filepath = generate_unique_filepath("tests/temp.toml");
+            let temp_file = fs::File::create(&temp_filepath).unwrap();
+
+            Self {
+                file: temp_file,
+                path: PathBuf::from(temp_filepath),
+            }
+        }
+        pub fn path(&self) -> &PathBuf {
+            &self.path
+        }
+        pub fn file(&self) -> &File {
+            &self.file
+        }
+    }
+
+    impl Drop for TestFile {
+        fn drop(&mut self) {
+            let _ = fs::remove_file(&self.path).unwrap();
+        }
+    }
+
+    fn generate_unique_filepath(path: &str) -> String {
+        let uuid = Uuid::new_v4();
+        let path = Path::new(path);
+
+        // get directory, filename without extension, and extension
+        let parent = path.parent().unwrap_or(Path::new("")).to_path_buf();
+        let stem = path.file_stem().unwrap().to_str().unwrap();
+        let ext = path.extension().unwrap().to_str().unwrap();
+
+        // construct the new path
+        let new_filename = format!("{}-{}.{}", stem, uuid, ext);
+        let new_path = parent.join(new_filename);
+
+        new_path.to_str().unwrap().to_string()
+    }
 
     #[test]
     fn read_toml_exists() {
-        let temp_filepath = "temp.toml";
-        let mut temp_file = fs::File::create(temp_filepath).unwrap();
-        write!(temp_file, "[ssh]\nuser=\"foo\nhost=\"bar\"").unwrap();
-
-        assert!(read_toml_to_string("temp.toml").is_ok());
-
-        fs::remove_file(temp_filepath).unwrap();
+        let ctx = TestFile::new();
+        // let (filepath, mut file) = generate_tempfile();
+        write!(ctx.file(), "[ssh]\nusername=\"foo\"\nhost=\"bar\"").unwrap();
+        assert!(read_toml_to_string(ctx.path.to_str().unwrap()).is_ok());
     }
 
     #[test]
@@ -176,22 +202,19 @@ mod test_config {
     #[test]
     fn config_read_y_file_n_ssh() {
         // create temp config file
-        let temp_filepath = "tests/temp.toml";
-        let mut temp_file = fs::File::create(temp_filepath).unwrap();
-        write!(temp_file, "[foo]\nkey1=\"foo\"\nkey2=\"bar\"").unwrap();
+        // let temp_filepath = "tests/temp.toml";
+        let ctx = TestFile::new();
+        write!(ctx.file(), "[foo]\nkey1=\"foo\"\nkey2=\"bar\"").unwrap();
 
-        assert!(Config::new(Some(temp_filepath)).is_ok());
-
-        fs::remove_file(temp_filepath).unwrap();
+        assert!(Config::new(Some(ctx.path().to_str().unwrap())).is_ok());
     }
 
     #[test]
     fn config_read_y_file_y_ssh() {
-        let temp_filepath = "temp.toml";
-        let mut temp_file = fs::File::create(temp_filepath).unwrap();
-        write!(temp_file, "[ssh]\nuser=\"foo\"\nhost=\"bar\"").unwrap();
+        let ctx = TestFile::new();
+        write!(ctx.file(), "[ssh]\nusername=\"foo\"\nhost=\"bar\"").unwrap();
 
-        let cfg = Config::new(Some(temp_filepath)).unwrap();
+        let cfg = Config::new(Some(&ctx.path().to_str().unwrap())).unwrap();
 
         assert_eq!("foo", cfg.ssh_username().unwrap());
         assert_eq!("bar", cfg.ssh_host().unwrap());
