@@ -1,2 +1,3 @@
-/target
-/ref
+node_modules
+ref
+
