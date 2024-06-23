@@ -4,8 +4,8 @@ all:
 a +ARGS:
 	bun kli.ts repo new {{ARGS}}
 
-b:
+build-node:
 	bun build ./kli.ts --outdir /bin --target node
 
-c:
-	bun build ./kli.ts --outfile kli --compile
+compile:
+	bun build src/kli.ts --outfile kli --compile
