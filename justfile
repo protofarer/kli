@@ -9,3 +9,6 @@ build-node:
 
 compile:
 	bun build src/kli.ts --outfile kli --compile
+
+release:
+	
