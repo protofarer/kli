@@ -85,10 +85,10 @@ function create_repo_commands(program: Command, config: Config) {
   repo
     .command('new')
     // .argument("<string>", "Enter foo string")
-    .option('-n, --name <string>', 'Repository name')
+    .argument('[name]', 'Repository name')
     .option('-p, --public', 'Create a public repository', false) // shorthand doesnt work
-    .action(async (options) => {
-      let repoName = options.name
+    .action(async (name, options) => {
+      let repoName = name
       let isPublic = options.public || false
 
       // check for existing repo
@@ -104,25 +104,26 @@ function create_repo_commands(program: Command, config: Config) {
           process.exit(1)
         }
       } catch (error) {
-        console.error(error)
+        console.log('No local repo detected, creating one for you')
+        execSync('git init')
       }
 
-      console.log('No local repo detected, creating one for you..')
-      execSync('git init')
-
       if (!repoName) {
-        let filepath = path.join(process.cwd(), 'package.json')
         try {
+          const filepath = path.join(process.cwd(), 'package.json')
           const fileContent = await fs.readFile(filepath, 'utf-8')
           const file = JSON.parse(fileContent)
-          if (!file) {
-            console.error('Error: no repo name available in a package.json')
-            process.exit(1)
-          }
           repoName = file.name
         } catch (error) {
-          console.error(`Error reading package.json:`, error)
-          process.exit(1)
+          const answers = await inquirer.prompt([
+            {
+              type: 'input',
+              name: 'repoName',
+              message: 'Enter a name for the repository:',
+              validate: (input) => input.trim() !== '' || 'Repository name cannot be empty'
+            }
+          ])
+          repoName = answers.repoName
         }
       }
 
